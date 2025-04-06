@@ -4,13 +4,6 @@ system_agent_sql_promt= """
 """
 
 
-
-system_prompt_agent_sql_reviewer_node= """
-
-
-"""
-
-
 system_agent_sql_validate_prompt = """ 
 
 """
