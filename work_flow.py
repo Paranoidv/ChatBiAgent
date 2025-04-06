@@ -46,6 +46,7 @@ def search_tables_and_schemas(state: ChatBIAgentState) -> ChatBIAgentState:
     # 解析输入
     docs_retrieved = retriever.invoke(state["question"])
     # eg. "找出一季度的XXX公司财务报表"
+    # 必须先将相关内容upload to bigquery
     tables_metadata = [json.loads(doc.page_content) for doc in docs_retrieved]
 
     schemas = []
