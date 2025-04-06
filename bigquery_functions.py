@@ -1,4 +1,3 @@
-from google.api_core.exceptions import NotFound
 from google.cloud import bigquery
 import pandas as pd
 import json
@@ -14,10 +13,10 @@ def get_table_schema(client, project_id, dataset_id, table_id):
             schema_lines.extend(field_to_string(field))
             
         return '\n'.join(schema_lines)
-        
-    except NotFound:
+
+    except Exception as e:
         print(f"Table {table_ref} not found")
-        return None
+        return None 
 
 def field_to_string(field, parent=""):
     lines = []

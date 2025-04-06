@@ -17,22 +17,22 @@ class ChatBIAgentState(TypedDict):
     question: str
     database_schemas: str
     query: str
-    max_num_retries_debug: int
-    num_retries_debug_sql: int
-    result_debug_sql: str
-    error_msg_debug_sql: str
+    max_num_retries: int
+    num_retries_sql: int
+    result_sql: str
+    error_msg_sql: str
     df: pd.DataFrame
     visualize_request: str
     python_code_data_visualize: str
     python_code_store_variables_dict: dict
-    num_retries_debug_python_code_data_visualize: int
-    result_debug_python_code_data_visualize: str
-    error_msg_debug_python_code_data_visualize: str
+    num_retries_python_code_data_visualize: int
+    result_python_code_data_visualize: str
+    error_msg_python_code_data_visualize: str
 
 
 llm = ChatGroq(model="llama3", temperature=0.3)
 # llm = init_chat_model("deepseek-chat", model_provider="deepseek")
-max_characters_error_msg_debug = 300
+max_error_msg_num = 300
 
 retriever = VertexAISearchRetriever(
     project_id=settings.project_id,
@@ -89,19 +89,19 @@ def agent_sql_validator_node(state: ChatBIAgentState) -> ChatBIAgentState:
         df = bq_client.query(state["query"]).to_dataframe()
         state["df"] = df
 
-        state["result_debug_sql"] = "Pass"
-        state["error_msg_debug_sql"] = ""
-        print(f"result: {state['result_debug_sql']}")
+        state["result_sql"] = "Pass"
+        state["error_msg_sql"] = ""
+        print(f"result: {state['result_sql']}")
 
         return state
         
     except Exception as e:
-        state["num_retries_debug_sql"] += 1
+        state["num_retries_sql"] += 1
 
-        state["result_debug_sql"] = "Not Pass"
-        state["error_msg_debug_sql"] = str(e)[0:max_characters_error_msg_debug]
-        print(f"result: {state['result_debug_sql']}")
-        print(f"error message: {state['error_msg_debug_sql']}")
+        state["result_sql"] = "Not Pass"
+        state["error_msg_sql"] = str(e)[0:max_error_msg_num]
+        print(f"result: {state['result_sql']}")
+        print(f"error message: {state['error_msg_sql']}")
 
         print("\n Trying to fix the query: \n")
         prompt_template = ChatPromptTemplate(("system", prompts.system_agent_sql_validate_prompt))
@@ -110,7 +110,7 @@ def agent_sql_validator_node(state: ChatBIAgentState) -> ChatBIAgentState:
 
 
         response = chain.invoke({"query": state["query"], 
-                                "error_msg_debug": state["error_msg_debug_sql"]}).content
+                                "error_msg": state["error_msg_sql"]}).content
 
         state["query"] = utils.extract_code_block(content=response,language="sql")
         print(f"\n Query adjusted:\n {state['query']}")
@@ -126,7 +126,7 @@ def agent_bi_expert_node(state: ChatBIAgentState) -> ChatBIAgentState:
     response = chain.invoke({"question": state["question"],
                              "query": state["query"],
                              "df_structure": state["df"].dtypes,
-                             "df_sample": state["df"].head(5)
+                             "df_sample": state["df"].head(100)
                              }).content
 
     state["visualize_request"] = response
@@ -152,26 +152,26 @@ def agent_python_code_data_visualize_generator_node(state: ChatBIAgentState) -> 
 
 def agent_python_code_data_visualize_validator_node(state: ChatBIAgentState) -> ChatBIAgentState:    
 
-    print("\n Validating data visualizaten code:")
+    print("\n Validating data visualize code:")
     
     try:
         df = state["df"]
         exec_globals = {"df": df}
         exec(state["python_code_data_visualize"], exec_globals)
         state["python_code_store_variables_dict"] = exec_globals
-        state["result_debug_python_code_data_visualize"] = "Pass"
-        state["error_msg_debug_python_code_data_visualize"] = ""
-        print(f"result: {state['result_debug_python_code_data_visualize']}")
+        state["result_python_code_data_visualize"] = "Pass"
+        state["error_msg_python_code_data_visualize"] = ""
+        print(f"result: {state['result_python_code_data_visualize']}")
 
         return state
-        
+    
     except Exception as e:
-        state["num_retries_debug_python_code_data_visualize"] += 1
+        state["num_retries_python_code_data_visualize"] += 1
 
-        state["result_debug_python_code_data_visualize"] = "Not Pass"
-        state["error_msg_debug_python_code_data_visualize"] = str(e)[0:max_characters_error_msg_debug]
-        print(f"result: {state['result_debug_python_code_data_visualize']}")
-        print(f"error message: {state['error_msg_debug_python_code_data_visualize']}")
+        state["result_python_code_data_visualize"] = "Not Pass"
+        state["error_msg_python_code_data_visualize"] = str(e)[0:max_error_msg_num]
+        print(f"result: {state['result_python_code_data_visualize']}")
+        print(f"error message: {state['error_msg_python_code_data_visualize']}")
 
         print("\n### Trying to fix the plotly code:")
         prompt_template = ChatPromptTemplate(("system", prompts.system_agent_python_code_data_visualize_generate_node_validate_prompt))
@@ -179,7 +179,7 @@ def agent_python_code_data_visualize_validator_node(state: ChatBIAgentState) -> 
         chain = prompt_template | llm
 
         response = chain.invoke({"python_code_data_visualize": state["python_code_data_visualize"], 
-                                "error_msg_debug": state["error_msg_debug_python_code_data_visualize"]}).content
+                                "error_msg": state["error_msg_python_code_data_visualize"]}).content
 
         state["python_code_data_visualize"] = utils.extract_code_block(content=response,language="python")
 
@@ -202,7 +202,7 @@ workflow.add_edge("agent_sql_writer_node","agent_sql_validator_node")
 workflow.add_conditional_edges(
     'agent_sql_validator_node',
     lambda state: 'agent_bi_expert_node' 
-    if state['result_debug_sql']=="Pass" or state['num_retries_debug_sql'] >= state['max_num_retries_debug'] 
+    if state['result_sql']=="Pass" or state['num_retries_sql'] >= state['max_num_retries'] 
     else 'agent_sql_validator_node',
     {'agent_bi_expert_node': 'agent_bi_expert_node','agent_sql_validator_node': 'agent_sql_validator_node'}
 )
@@ -212,7 +212,7 @@ workflow.add_edge("agent_python_code_data_visualize_generator_node","agent_pytho
 workflow.add_conditional_edges(
     'agent_python_code_data_visualize_validator_node',
     lambda state: "end" 
-    if state['result_debug_python_code_data_visualize']=="Pass" or state['num_retries_debug_python_code_data_visualize'] >= state['max_num_retries_debug'] 
+    if state['result_python_code_data_visualize']=="Pass" or state['num_retries_python_code_data_visualize'] >= state['max_num_retries'] 
     else 'agent_python_code_data_visualize_validator_node',
     {'end': END,'agent_python_code_data_visualize_validator_node': 'agent_python_code_data_visualize_validator_node'}
 )
@@ -227,17 +227,17 @@ def run_workflow(question: str) -> dict:
         question = question,
         database_schemas = "",
         query = "",
-        num_retries_debug_sql = 0,
-        max_num_retries_debug = 3,
-        result_debug_sql = "",
-        error_msg_debug_sql = "",
+        num_retries_sql = 0,
+        max_num_retries = 3,
+        result_sql = "",
+        error_msg_sql = "",
         df = pd.DataFrame(),
         visualization_request = "",
         python_code_data_visualize = "",
         python_code_store_variables_dict = {},
-        num_retries_debug_python_code_data_visualize = 0,
-        result_debug_python_code_data_visualize = "",
-        error_msg_debug_python_code_data_visualize = ""
+        num_retries_python_code_data_visualize = 0,
+        result_python_code_data_visualize = "",
+        error_msg_python_code_data_visualize = ""
     )
     final_state = app.invoke(initial_state)
     return final_state
